@@ -17,7 +17,7 @@ def random_target(rng: np.random.Generator, samples: int, sampling_rate: float,
         target[start:end] = rng.uniform(-1.0, 1.0)
     return target
 
-def generate_dataset(count: int = 10000, duration: float = 8.0,
+def generate_dataset(count: int = 1000, duration: float = 300.0,
                      sampling_rate: float = 100.0, seed: int = 42,
                      noise_std: float = 0.01, dwell_seconds: float = 3.0,
                      profile: str = "scope_x") -> dict[str, np.ndarray]:
@@ -71,8 +71,8 @@ def generate_dataset(count: int = 10000, duration: float = 8.0,
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate synthetic THRUST-synapse data.")
-    parser.add_argument("--count", type=int, default=10000)
-    parser.add_argument("--duration", type=float, default=8.0, help="Trial duration in seconds.")
+    parser.add_argument("--count", type=int, default=1000)
+    parser.add_argument("--duration", type=float, default=300.0, help="Trial duration in seconds.")
     parser.add_argument("--sampling-rate", type=float, default=100.0, help="Samples per second.")
     parser.add_argument("--noise-std", type=float, default=0.01)
     parser.add_argument("--profile", choices=["scope_x", "broad"], default="scope_x",
