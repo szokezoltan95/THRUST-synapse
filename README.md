@@ -48,7 +48,7 @@ Apply a trained checkpoint to one target/response pair in a THRUST TSV:
 thrust-synapse-predict --model models/scope_x_300s.pt --tsv path/to/measurement.tsv --input-column LXRQ --output-column LX --output-prefix results/LX
 ```
 
-The command resamples timestamps to the checkpoint sampling rate, scales raw axis values by 900, and saves estimated parameters, response RMSE, and a measured-versus-simulated plot. Repeat with RXRQ/RX for the second X axis. The scope_x parameter profile was initially derived from the same measurement used during development, so applying it to that file is a diagnostic check, not independent validation.
+The command resamples timestamps to the checkpoint sampling rate, scales raw axis values by 900, and saves estimated parameters, response RMSE, and a measured-versus-simulated plot. It also saves an event-aligned average response plot: isolated target steps are aligned at the change, normalized by step size, and shown separately for increasing and decreasing steps with individual traces, mean ± standard deviation, and the estimated model step response. Repeat with RXRQ/RX for the second X axis. The scope_x parameter profile was initially derived from the same measurement used during development, so applying it to that file is a diagnostic check, not independent validation.
 
 ## Dataset format
 
