@@ -48,7 +48,9 @@ Apply a trained checkpoint to one target/response pair in a THRUST TSV:
 thrust-synapse-predict --model models/scope_x_300s.pt --tsv path/to/measurement.tsv --input-column LXRQ --output-column LX --output-prefix results/LX
 ```
 
-The command resamples timestamps to the checkpoint sampling rate, scales raw axis values by 900, and saves estimated parameters, response RMSE, and a measured-versus-simulated plot. It also saves an event-aligned average response plot: isolated target steps are aligned at the change, normalized by step size, and shown separately for increasing and decreasing steps with individual traces, mean ± standard deviation, and the estimated model step response. Repeat with RXRQ/RX for the second X axis. The scope_x parameter profile was initially derived from the same measurement used during development, so applying it to that file is a diagnostic check, not independent validation.
+The command resamples timestamps to the checkpoint sampling rate and scales raw axis values by 900. By default it first obtains the neural estimate, then refines the physical parameters against the event-aligned mean response of isolated target steps. The refinement tries several damping-ratio starting points, including underdamped values, and uses a robust least-squares fit to the simulated second-order response. It saves both parameter sets, both whole-record response curves, and an event-aligned plot with individual traces, mean ± standard deviation, the neural step response, and the refined fit. Use `--no-refine` to produce only the neural estimate. Repeat with RXRQ/RX for the second X axis.
+
+The refinement is a local numerical optimizer in SciPy; it does not download or call a cloud model. The convolutional network remains the learned initializer, while the transfer-function simulator constrains the final fit to an interpretable model. Refinement requires at least three isolated steps and reports when it is skipped. The `scope_x` parameter profile was initially derived from the same measurement used during development, so applying it to that file is a diagnostic check, not independent validation.
 
 ## Dataset format
 
@@ -75,6 +77,7 @@ The generator creates piecewise-constant staircase targets, changing at a fixed 
 - [ ] Add configurable parameter bounds and dataset inspection utilities.
 - [x] Use staircase targets with configurable dwell durations.
 - [x] Save held-out parameter and response diagnostic plots.
+- [x] Add local response-based parameter refinement after neural inference.
 - [ ] Add response-based training on real measurements.
 - [ ] Benchmark recovery, robustness, and runtime.
 - [ ] Explore integration with THRUST-compute.
