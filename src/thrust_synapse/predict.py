@@ -4,8 +4,11 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+from datetime import datetime
 from pathlib import Path
 
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -13,6 +16,25 @@ import torch
 from .simulator import ModelParameters, simulate_response
 from .refine import fit_average_step_response
 from .train import ParameterRegressor
+
+
+def _save_figure(fig: plt.Figure, path: Path, dpi: int = 160) -> Path:
+    """Save a plot, using a unique filename if Windows has the old one locked."""
+    try:
+        fig.savefig(path, dpi=dpi)
+        return path
+    except OSError as first_error:
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        fallback = path.with_name(f"{path.stem}_{stamp}{path.suffix}")
+        try:
+            fig.savefig(fallback, dpi=dpi)
+        except OSError as fallback_error:
+            raise OSError(
+                f"Could not save plot to {path} or fallback path {fallback}. "
+                "Check that the output folder is writable."
+            ) from fallback_error
+        print(f"Could not overwrite {path}; saved a new copy to {fallback}", flush=True)
+        return fallback
 
 
 def read_tsv(path: Path, input_column: str, output_column: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -122,7 +144,7 @@ def save_average_response_plot(path: Path, time_axis: np.ndarray,
     axes[-1].set_xlabel("Time after target change (s)")
     fig.suptitle("Event-aligned average response")
     fig.tight_layout()
-    fig.savefig(path, dpi=160)
+    _save_figure(fig, path, dpi=160)
     plt.close(fig)
     return counts
 
@@ -240,7 +262,7 @@ def predict_tsv(model_path: Path, tsv_path: Path, input_column: str, output_colu
         f"RMSE={rmse:.4f}"
     )
     fig.tight_layout()
-    fig.savefig(plot_path, dpi=160)
+    plot_path = _save_figure(fig, plot_path, dpi=160)
     plt.close(fig)
 
     for key, value in metrics.items():
