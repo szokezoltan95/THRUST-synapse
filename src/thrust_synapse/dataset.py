@@ -27,10 +27,13 @@ def random_target(rng: np.random.Generator, samples: int, sampling_rate: float,
 def generate_dataset(count: int = 10000, duration: float = 8.0,
                      sampling_rate: float = 100.0, seed: int = 42,
                      noise_std: float = 0.01, min_dwell_seconds: float = 0.3,
-                     max_dwell_seconds: float = 1.5) -> dict[str, np.ndarray]:
+                     max_dwell_seconds: float = 1.5,
+                     profile: str = "scope_x") -> dict[str, np.ndarray]:
     """Generate input/output trials and known model parameter labels."""
     if count < 1 or duration <= 0 or sampling_rate <= 0 or noise_std < 0:
         raise ValueError("count/duration/sampling_rate must be positive and noise_std nonnegative")
+    if profile not in {"scope_x", "broad"}:
+        raise ValueError("profile must be 'scope_x' or 'broad'")
     rng = np.random.default_rng(seed)
     samples = int(round(duration * sampling_rate))
     if samples < 2:
@@ -39,12 +42,25 @@ def generate_dataset(count: int = 10000, duration: float = 8.0,
     outputs = np.empty_like(inputs)
     labels = np.empty((count, 4), dtype=np.float32)
     for i in range(count):
-        params = ModelParameters(
-            gain=float(rng.uniform(0.6, 1.4)),
-            natural_frequency=float(np.exp(rng.uniform(np.log(0.5), np.log(12.0)))),
-            damping_ratio=float(np.exp(rng.uniform(np.log(0.25), np.log(2.0)))),
-            delay=float(rng.uniform(0.0, 0.5)),
-        )
+        if profile == "scope_x":
+            # Approximate fit to the two X-axis channels in the supplied
+            # measurement: wn 7.5-11.4 rad/s, zeta 0.89-0.97,
+            # gain 0.98-0.99, and delay 0.24-0.28 s.
+            params = ModelParameters(
+                gain=float(np.clip(rng.normal(0.986, 0.07), 0.75, 1.20)),
+                natural_frequency=float(np.clip(
+                    rng.lognormal(np.log(9.3), 0.20), 5.0, 15.0
+                )),
+                damping_ratio=float(np.clip(rng.normal(0.93, 0.12), 0.60, 1.30)),
+                delay=float(np.clip(rng.normal(0.258, 0.06), 0.08, 0.45)),
+            )
+        else:
+            params = ModelParameters(
+                gain=float(rng.uniform(0.6, 1.4)),
+                natural_frequency=float(np.exp(rng.uniform(np.log(0.5), np.log(12.0)))),
+                damping_ratio=float(np.exp(rng.uniform(np.log(0.25), np.log(2.0)))),
+                delay=float(rng.uniform(0.0, 0.5)),
+            )
         target = random_target(rng, samples, sampling_rate, min_dwell_seconds, max_dwell_seconds)
         response = simulate_response(target, params, sampling_rate)
         if noise_std:
@@ -58,6 +74,7 @@ def generate_dataset(count: int = 10000, duration: float = 8.0,
                                        "damping_ratio", "delay_s"]),
         "sampling_rate_hz": np.asarray(sampling_rate, dtype=np.float32),
         "seed": np.asarray(seed, dtype=np.int64),
+        "parameter_profile": np.asarray(profile),
     }
 
 def main() -> None:
@@ -66,12 +83,14 @@ def main() -> None:
     parser.add_argument("--duration", type=float, default=8.0, help="Trial duration in seconds.")
     parser.add_argument("--sampling-rate", type=float, default=100.0, help="Samples per second.")
     parser.add_argument("--noise-std", type=float, default=0.01)
+    parser.add_argument("--profile", choices=["scope_x", "broad"], default="scope_x",
+                        help="Parameter distribution: fitted X-axis range or original broad range.")
     parser.add_argument("--min-dwell", type=float, default=0.3, help="Minimum target hold time in seconds.")
     parser.add_argument("--max-dwell", type=float, default=1.5, help="Maximum target hold time in seconds.")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", type=Path, default=Path("data/synthetic/train.npz"))
     args = parser.parse_args()
-    data = generate_dataset(args.count, args.duration, args.sampling_rate, args.seed, args.noise_std, args.min_dwell, args.max_dwell)
+    data = generate_dataset(args.count, args.duration, args.sampling_rate, args.seed, args.noise_std, args.min_dwell, args.max_dwell, args.profile)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(args.output, **data)
     print(f"Saved {args.count} trials ({data['inputs'].shape[1]} samples each) to {args.output}")
