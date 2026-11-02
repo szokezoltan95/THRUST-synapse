@@ -14,7 +14,7 @@ import numpy as np
 import torch
 
 from .simulator import ModelParameters, simulate_response
-from .refine import fit_average_step_response
+from .refine import fit_typical_step_response
 from .train import ParameterRegressor
 
 
@@ -195,7 +195,7 @@ def predict_tsv(model_path: Path, tsv_path: Path, input_column: str, output_colu
         if total_steps >= 3:
             print(f"Refining against {total_steps} isolated measured steps...", flush=True)
             try:
-                refined_parameters, refined_typical_rmse = fit_average_step_response(
+                refined_parameters, refined_typical_rmse = fit_typical_step_response(
                     average_time, average_steps, sampling_rate, neural_parameters
                 )
             except ValueError as exc:
