@@ -252,7 +252,7 @@ def predict_tsv(model_path: Path, tsv_path: Path, input_column: str, output_colu
                  linewidth=1.0, alpha=0.8)
     if refined_parameters is not None:
         axes[1].plot(uniform_time - uniform_time[0], model_response,
-                     label="Refined mean-step fit", linewidth=1.2)
+                     label="Refined typical-step fit", linewidth=1.2)
     axes[1].set_ylabel(f"Response ({output_column}) / {scale:g}")
     axes[1].set_xlabel("Time (s)")
     axes[1].legend()
