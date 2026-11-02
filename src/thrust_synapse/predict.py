@@ -139,6 +139,7 @@ def predict_tsv(model_path: Path, tsv_path: Path, input_column: str, output_colu
     )
     rmse = float(np.sqrt(np.mean((model_response - response) ** 2)))
     average_time, average_steps = extract_average_steps(target, response, sampling_rate)
+    output_prefix.parent.mkdir(parents=True, exist_ok=True)
     average_plot_path = output_prefix.with_name(output_prefix.name + "_average_response.png")
     step_counts = save_average_response_plot(
         average_plot_path, average_time, average_steps,
