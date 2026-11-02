@@ -44,11 +44,11 @@ def fit_average_step_response(
     if len(observed) < 3:
         raise ValueError("At least three isolated steps are required for refinement")
 
-    # Weight each time sample equally, while soft_l1 limits the effect of
-    # isolated spikes and imperfect event alignment.
-    measured_mean = np.mean(observed, axis=0)
-    measured_spread = np.std(observed, axis=0)
-    weights = 1.0 / np.sqrt(1.0 + (measured_spread / 0.05) ** 2)
+    # Fit the typical event instead of the arithmetic mean: occasional
+    # event-to-event timing differences otherwise wash out short overshoots.
+    # Give the transient more influence than the long settled plateau.
+    measured_typical = np.median(observed, axis=0)
+    time_weights = 1.0 + 1.5 * np.exp(-np.asarray(time_axis, dtype=np.float64) / 0.6)
 
     unit_step = np.ones(len(time_axis), dtype=np.float64)
     unit_step[0] = 0.0
@@ -58,7 +58,7 @@ def fit_average_step_response(
         simulated = simulate_response(
             unit_step, parameters, sampling_rate, initial_output=offset
         )
-        return (simulated - measured_mean) * weights
+        return (simulated - measured_typical) * time_weights
 
     lower = np.array([np.log(0.2), np.log(1.0), np.log(0.025), 0.0, -1.5, 0.0])
     upper = np.array([np.log(2.5), np.log(35.0), np.log(2.0), 1.0, 1.5, 0.5])
@@ -67,7 +67,7 @@ def fit_average_step_response(
         np.log(np.clip(initial.natural_frequency, 1.0, 35.0)),
         np.log(np.clip(initial.damping_ratio, 0.025, 2.0)),
         np.clip(initial.delay, 0.0, 1.0),
-        float(measured_mean[0]),
+        float(measured_typical[0]),
         0.0,
     ])
     damping_starts = sorted({
