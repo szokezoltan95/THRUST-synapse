@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import time
 
 import numpy as np
 import torch
@@ -112,24 +113,39 @@ def train(data_path: Path, output_path: Path, epochs: int = 100,
     best_loss, best_state, patience = float("inf"), None, 15
 
     for epoch in range(epochs):
+        epoch_started = time.perf_counter()
         model.train()
+        train_loss_sum = 0.0
+        train_sample_count = 0
         for xb, yb in loader:
             xb, yb = xb.to(device), yb.to(device)
             optimizer.zero_grad(set_to_none=True)
             loss = loss_fn(model(xb), yb)
             loss.backward()
             optimizer.step()
+            train_loss_sum += float(loss.item()) * len(xb)
+            train_sample_count += len(xb)
+        train_loss = train_loss_sum / train_sample_count
         model.eval()
         with torch.no_grad():
             val_loss = float(loss_fn(model(x_val), y_val).item())
-        if val_loss < best_loss:
+        improved = val_loss < best_loss
+        if improved:
             best_loss = val_loss
             best_state = {key: value.detach().cpu().clone() for key, value in model.state_dict().items()}
             patience = 15
         else:
             patience -= 1
-            if patience == 0:
-                break
+        status = "best" if improved else f"patience {patience}/15"
+        elapsed = time.perf_counter() - epoch_started
+        print(
+            f"Epoch {epoch + 1:03d}/{epochs} | train loss {train_loss:.6f} "
+            f"| val loss {val_loss:.6f} | {status} | {elapsed:.1f}s",
+            flush=True,
+        )
+        if patience == 0:
+            print("Early stopping: validation loss did not improve for 15 epochs.", flush=True)
+            break
 
     if best_state is None:
         raise RuntimeError("Training did not produce a model")
