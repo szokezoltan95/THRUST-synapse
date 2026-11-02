@@ -31,13 +31,13 @@ python -m pip install -e ".[train]"
 Generate 1,000 five-minute trials sampled at 100 Hz, with the target changing exactly every three seconds:
 
 ```bash
-thrust-synapse-generate --count 1000 --duration 300 --sampling-rate 100 --seed 42 --profile scope_x --dwell-seconds 3 --output data/synthetic/train.npz
+thrust-synapse-generate --count 1000 --duration 300 --sampling-rate 100 --seed 42 --profile scope_x --dwell-seconds 3 --output data/synthetic/scope_x_300s.npz
 ```
 
 Train the baseline estimator with an automatic 80/10/10 train/validation/test split:
 
 ```bash
-thrust-synapse-train --data data/synthetic/train.npz --output models/baseline.pt --epochs 100 --batch-size 8 --seed 123
+thrust-synapse-train --data data/synthetic/scope_x_300s.npz --output models/scope_x_300s.pt --epochs 100 --batch-size 8 --seed 123
 ```
 
 The split seed is independent of the dataset generation seed. Keep the test set for final evaluation; use validation performance for model selection. The training script reports parameter errors and response RMSE on the held-out test portion. It also saves parameter comparison and response example plots, plus an NPZ file with test predictions, beside the model. The true-parameter response RMSE provides a reference for the measurement-noise floor.
