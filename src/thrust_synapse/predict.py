@@ -11,6 +11,7 @@ import numpy as np
 import torch
 
 from .simulator import ModelParameters, simulate_response
+from .refine import fit_average_step_response
 from .train import ParameterRegressor
 
 
@@ -68,13 +69,16 @@ def extract_average_steps(target: np.ndarray, response: np.ndarray, sampling_rat
 
 def save_average_response_plot(path: Path, time_axis: np.ndarray,
                                step_responses: dict[str, np.ndarray],
-                               parameters: ModelParameters, sampling_rate: float) -> dict[str, int]:
+                               parameters: ModelParameters, sampling_rate: float,
+                               refined_parameters: ModelParameters | None = None) -> dict[str, int]:
     """Plot event-aligned measured step responses and the estimated model step response."""
     fig, axes = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
     counts: dict[str, int] = {}
     unit_step = np.ones(time_axis.size, dtype=np.float64)
     unit_step[0] = 0.0
     model_step = simulate_response(unit_step, parameters, sampling_rate, initial_output=0.0)
+    refined_step = (simulate_response(unit_step, refined_parameters, sampling_rate, initial_output=0.0)
+                    if refined_parameters is not None else None)
 
     for ax, direction in zip(axes, ("increasing", "decreasing")):
         rows = step_responses[direction]
@@ -88,8 +92,11 @@ def save_average_response_plot(path: Path, time_axis: np.ndarray,
             ax.fill_between(time_axis, mean - spread, mean + spread,
                             color="tab:blue", alpha=0.18, label="Mean ± 1 SD")
             ax.plot(time_axis, mean, color="tab:blue", linewidth=2, label="Measured mean")
-            ax.plot(time_axis, model_step, color="tab:orange", linewidth=1.6,
-                    label="Estimated transfer function")
+            ax.plot(time_axis, model_step, color="tab:orange", linewidth=1.4,
+                    label="Neural estimate")
+            if refined_step is not None:
+                ax.plot(time_axis, refined_step, color="tab:green", linewidth=1.8,
+                        label="Refined fit to measured mean")
         else:
             ax.text(0.5, 0.5, "No isolated steps available", ha="center", va="center",
                     transform=ax.transAxes)
@@ -105,7 +112,8 @@ def save_average_response_plot(path: Path, time_axis: np.ndarray,
 
 
 def predict_tsv(model_path: Path, tsv_path: Path, input_column: str, output_column: str,
-                output_prefix: Path, scale: float = 900.0) -> dict[str, float]:
+                output_prefix: Path, scale: float = 900.0,
+                refine: bool = True) -> dict[str, float]:
     if scale <= 0:
         raise ValueError("scale must be positive")
     checkpoint = torch.load(model_path, map_location="cpu", weights_only=False)
@@ -131,19 +139,44 @@ def predict_tsv(model_path: Path, tsv_path: Path, input_column: str, output_colu
     parameters[:3] = np.exp(parameters[:3])
     gain, natural_frequency, damping_ratio, delay = (float(v) for v in parameters)
     safe_delay = max(0.0, delay)
-    model_response = simulate_response(
-        target - target[0],
-        ModelParameters(gain, natural_frequency, damping_ratio, safe_delay),
-        sampling_rate=sampling_rate,
+    neural_parameters = ModelParameters(gain, natural_frequency, damping_ratio, safe_delay)
+    neural_response = simulate_response(
+        target - target[0], neural_parameters, sampling_rate=sampling_rate,
         initial_output=float(response[0]),
     )
-    rmse = float(np.sqrt(np.mean((model_response - response) ** 2)))
+    neural_rmse = float(np.sqrt(np.mean((neural_response - response) ** 2)))
     average_time, average_steps = extract_average_steps(target, response, sampling_rate)
+
+    refined_parameters = None
+    refined_average_rmse = None
+    if refine:
+        total_steps = sum(len(rows) for rows in average_steps.values())
+        if total_steps >= 3:
+            print(f"Refining against {total_steps} isolated measured steps...", flush=True)
+            try:
+                refined_parameters, refined_average_rmse = fit_average_step_response(
+                    average_time, average_steps, sampling_rate, neural_parameters
+                )
+            except ValueError as exc:
+                print(f"Response refinement skipped: {exc}", flush=True)
+        else:
+            print(f"Response refinement skipped: only {total_steps} isolated steps found.", flush=True)
+
+    if refined_parameters is not None:
+        gain, natural_frequency = refined_parameters.gain, refined_parameters.natural_frequency
+        damping_ratio, safe_delay = refined_parameters.damping_ratio, refined_parameters.delay
+        model_response = simulate_response(
+            target - target[0], refined_parameters, sampling_rate=sampling_rate,
+            initial_output=float(response[0]),
+        )
+    else:
+        model_response = neural_response
+    rmse = float(np.sqrt(np.mean((model_response - response) ** 2)))
     output_prefix.parent.mkdir(parents=True, exist_ok=True)
     average_plot_path = output_prefix.with_name(output_prefix.name + "_average_response.png")
     step_counts = save_average_response_plot(
-        average_plot_path, average_time, average_steps,
-        ModelParameters(gain, natural_frequency, damping_ratio, safe_delay), sampling_rate
+        average_plot_path, average_time, average_steps, neural_parameters, sampling_rate,
+        refined_parameters=refined_parameters,
     )
 
     output_prefix.parent.mkdir(parents=True, exist_ok=True)
@@ -153,6 +186,13 @@ def predict_tsv(model_path: Path, tsv_path: Path, input_column: str, output_colu
         "damping_ratio": damping_ratio,
         "delay_s": delay,
         "response_rmse_normalized": rmse,
+        "neural_gain": neural_parameters.gain,
+        "neural_natural_frequency_rad_s": neural_parameters.natural_frequency,
+        "neural_damping_ratio": neural_parameters.damping_ratio,
+        "neural_delay_s": neural_parameters.delay,
+        "neural_response_rmse_normalized": neural_rmse,
+        "refinement_used": refined_parameters is not None,
+        "refined_average_step_rmse": refined_average_rmse,
         "duration_s": float(uniform_time[-1] - uniform_time[0]),
         "sampling_rate_hz": sampling_rate,
         "isolated_increasing_steps": step_counts["increasing"],
@@ -165,7 +205,11 @@ def predict_tsv(model_path: Path, tsv_path: Path, input_column: str, output_colu
     axes[0].plot(uniform_time - uniform_time[0], target, color="0.55", linewidth=0.9)
     axes[0].set_ylabel(f"Target ({input_column}) / {scale:g}")
     axes[1].plot(uniform_time - uniform_time[0], response, label="Measured response", linewidth=0.8)
-    axes[1].plot(uniform_time - uniform_time[0], model_response, label="Estimated model", linewidth=1.1)
+    axes[1].plot(uniform_time - uniform_time[0], neural_response, label="Neural estimate",
+                 linewidth=1.0, alpha=0.8)
+    if refined_parameters is not None:
+        axes[1].plot(uniform_time - uniform_time[0], model_response,
+                     label="Refined mean-step fit", linewidth=1.2)
     axes[1].set_ylabel(f"Response ({output_column}) / {scale:g}")
     axes[1].set_xlabel("Time (s)")
     axes[1].legend()
@@ -185,6 +229,13 @@ def predict_tsv(model_path: Path, tsv_path: Path, input_column: str, output_colu
     print(f"Saved response plot to {plot_path}")
     print(f"Saved event-aligned average response to {average_plot_path}")
     print(f"Included steps: increasing={step_counts['increasing']}, decreasing={step_counts['decreasing']}")
+    if refined_parameters is not None:
+        print(
+            "Refined mean-step parameters: "
+            f"K={gain:.4f}, wn={natural_frequency:.4f} rad/s, "
+            f"zeta={damping_ratio:.4f}, delay={safe_delay:.4f} s; "
+            f"mean-step RMSE={refined_average_rmse:.5f}"
+        )
     return metrics
 
 
@@ -197,9 +248,11 @@ def main() -> None:
     parser.add_argument("--output-prefix", type=Path, default=Path("results/real_scope"))
     parser.add_argument("--scale", type=float, default=900.0,
                         help="Divide raw target and response by this value before inference.")
+    parser.add_argument("--no-refine", action="store_true",
+                        help="Use only the neural estimate; skip measured step-response refinement.")
     args = parser.parse_args()
     predict_tsv(args.model, args.tsv, args.input_column, args.output_column,
-                args.output_prefix, args.scale)
+                args.output_prefix, args.scale, refine=not args.no_refine)
 
 
 if __name__ == "__main__":
