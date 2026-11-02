@@ -6,85 +6,68 @@ THRUST-synapse is an experimental research component of the **THRUST** ecosystem
 
 The project explores neural networks that estimate interpretable transfer-function parameters directly from a target trajectory and the corresponding measured control-stick response.
 
-> **Status: project initialization.** This repository currently contains the project outline. Dataset generation, training, inference, and integration are planned; no trained model or runnable application is available yet.
-
-## Purpose
-
-The intended workflow is to train a network once and then estimate model parameters from new measurements using a forward pass, without a separate iterative parameter search for each measurement.
-
-The output remains a classical transfer function, allowing simulated responses, parameter comparisons, and validation alongside conventional identification methods. Speed and accuracy improvements must be established experimentally.
+> **Status: early development.** The repository contains a second-order delayed-system simulator and a reproducible synthetic dataset generator. Neural-network training, real-data workflows, and THRUST integration are not implemented yet.
 
 ## Initial model
 
-The proposed baseline is a second-order system with transport delay:
+The baseline is a second-order system with transport delay:
 
 $$
 G(s) = K \frac{\omega_n^2}{s^2 + 2\zeta\omega_n s + \omega_n^2} e^{-\tau s}
 $$
 
-| Parameter | Meaning |
-| --- | --- |
-| $K$ | Steady-state gain |
-| $\omega_n$ | Natural angular frequency, in rad/s |
-| $\zeta$ | Damping ratio |
-| $\tau$ | Transport delay, in seconds |
+Parameters are gain $K$, natural angular frequency $\omega_n$ in rad/s, damping ratio $\zeta$, and delay $\tau$ in seconds. Damping values below and above one allow both underdamped complex poles and non-oscillatory real poles.
 
-Positive natural frequency and damping provide a stable dynamic component. Allowing damping below and above one supports both complex-conjugate and real poles. Delay is constrained to be nonnegative.
+The simulator uses a zero-order hold at the selected sampling rate and linearly interpolates fractional-sample delays. Its initial input/output definition is target position to measured stick position.
 
-The initial input/output definition is **target position → measured stick position**. This describes overall tracking behavior; an error-to-stick operator model would require a separately defined identification setup.
+## Quick start
 
-## Planned learning workflow
+Install the package in editable mode:
 
-1. **Synthetic pretraining** — simulate known parameter combinations, varied target trajectories, initial conditions, and realistic measurement disturbances.
-2. **Learning from real measurements** — use a differentiable simulator to reconstruct measured responses from predicted parameters. Training minimizes response mismatch without requiring ground-truth parameter labels.
-3. **Independent validation** — evaluate parameter recovery on synthetic tests and response reconstruction and prediction on held-out real trials.
-4. **Local inference** — estimate parameters and report response agreement for new measurements.
+```bash
+python -m pip install -e .
+```
 
-Synthetic variants derived from the same underlying example must remain in the same dataset split. Real-data splits should account for participants and sessions to avoid leakage and distinguish within-participant from unseen-participant performance.
+Generate 10,000 eight-second trials sampled at 100 Hz:
 
-## THRUST data and integration
+```bash
+thrust-synapse-generate --count 10000 --duration 8 --sampling-rate 100 --seed 42 --output data/synthetic/train.npz
+```
 
-The intended data source is THRUST tracking measurements, initially focusing on SCoPE:
+The generator is also callable from Python:
 
-- Nominal sampling rate: **100 Hz**.
-- Standard stick channels: **LX, LY, RX, RY**.
-- Corresponding target/request channels where recorded.
-- Planned compatibility with THRUST exports and the existing analysis workflow.
+```python
+from thrust_synapse.dataset import generate_dataset
 
-Trial duration and preprocessing will be configurable. Longer windows can help capture settling and oscillations, but the usable window must reflect actual task boundaries.
+dataset = generate_dataset(count=1000, duration=8.0, sampling_rate=100.0, seed=42)
+```
 
-| Component | Role |
-| --- | --- |
-| THRUST-measure | Measurement acquisition |
-| THRUST-webdb | Measurement storage and access |
-| THRUST-compute | Existing analysis and conventional model identification |
-| **THRUST-synapse** | Experimental neural parameter estimation |
+Each compressed NPZ dataset contains:
 
-## Validation principles
+| Array | Shape | Description |
+| --- | --- | --- |
+| `inputs` | `(trials, samples)` | Random piecewise-constant target trajectories |
+| `outputs` | `(trials, samples)` | Simulated responses with additive Gaussian measurement noise |
+| `parameters` | `(trials, 4)` | Ground-truth labels in the order gain, natural frequency, damping ratio, delay |
+| `parameter_names` | `(4,)` | Names and units for the label columns |
+| `sampling_rate_hz` | scalar | Sampling rate |
+| `seed` | scalar | Random seed for reproducibility |
 
-A close fit does not establish unique or physiologically exact parameters. Different parameter combinations may produce similar responses, and human behavior may depart from the selected model structure.
+Default parameter ranges are gain 0.6–1.4, natural frequency 0.5–12 rad/s (log-uniform), damping ratio 0.25–2 (log-uniform), and delay 0–0.5 seconds. The default output noise standard deviation is 0.01 target units. These are initial engineering ranges for experimentation, not ranges established from participant data.
 
-Evaluation should therefore include:
+Use different seeds for separate dataset splits. Do not place augmented copies of the same base trial in different splits. The generator currently creates piecewise-constant targets; richer target patterns and experimentally calibrated noise will be added as the real measurement workflow is defined.
 
-- Parameter recovery on unseen synthetic examples.
-- Response error on held-out real trials.
-- Parameter consistency across comparable tasks.
-- Comparison with conventional identification using the same data and model structure.
-- Inference runtime and robustness to noise and model mismatch.
+## Development status
 
-Experimental measurements and participant data are not intended to be committed to this repository.
-
-## Initial roadmap
-
-- [ ] Define parameter bounds, preprocessing, and dataset format.
-- [ ] Implement and verify the delayed second-order simulator.
-- [ ] Build a reproducible synthetic dataset generator.
+- [x] Implement the delayed second-order simulator.
+- [x] Generate labeled synthetic trials with a fixed seed.
+- [ ] Add validation and configurable parameter bounds.
+- [ ] Add synthetic data inspection and dataset split utilities.
 - [ ] Train a baseline neural parameter estimator.
-- [ ] Add differentiable response-based training on real data.
-- [ ] Benchmark accuracy, robustness, and runtime.
-- [ ] Export model parameters, validation metrics, and response plots.
+- [ ] Add response-based training on real measurements.
+- [ ] Benchmark recovery, robustness, and runtime.
 - [ ] Explore integration with THRUST-compute.
 
-## Planned implementation
+Synthetic parameter recovery alone will not establish that the model describes human behavior. Real measurements are needed to assess response prediction and parameter consistency. Different parameter combinations may produce similar responses, so fit quality does not guarantee unique or physiologically exact parameters.
 
-Python and PyTorch are the proposed foundation for local training and inference. CPU execution is intended, with optional GPU acceleration for training. Dependencies and installation instructions will be added with the first implementation.
+Experimental measurements and participant data are not intended to be committed to this repository. Python and PyTorch are the proposed foundation for training and inference; PyTorch will be added when the training component is implemented.
