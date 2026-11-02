@@ -28,10 +28,10 @@ Install the package and training dependency:
 python -m pip install -e ".[train]"
 ```
 
-Generate 10,000 eight-second trials sampled at 100 Hz:
+Generate 10,000 eight-second trials sampled at 100 Hz, with target levels held for 0.3–1.5 seconds:
 
 ```bash
-thrust-synapse-generate --count 10000 --duration 8 --sampling-rate 100 --seed 42 --output data/synthetic/train.npz
+thrust-synapse-generate --count 10000 --duration 8 --sampling-rate 100 --seed 42 --min-dwell 0.3 --max-dwell 1.5 --output data/synthetic/train.npz
 ```
 
 Train the baseline estimator with an automatic 80/10/10 train/validation/test split:
@@ -40,7 +40,7 @@ Train the baseline estimator with an automatic 80/10/10 train/validation/test sp
 thrust-synapse-train --data data/synthetic/train.npz --output models/baseline.pt --epochs 100 --seed 123
 ```
 
-The split seed is independent of the dataset generation seed. Keep the test set for final evaluation; use validation performance for model selection. The training script reports parameter errors and response RMSE on the held-out test portion.
+The split seed is independent of the dataset generation seed. Keep the test set for final evaluation; use validation performance for model selection. The training script reports parameter errors and response RMSE on the held-out test portion. It also saves parameter comparison and response example plots, plus an NPZ file with test predictions, beside the model. The true-parameter response RMSE provides a reference for the measurement-noise floor.
 
 ## Dataset format
 
@@ -57,7 +57,7 @@ Each compressed NPZ dataset contains:
 
 Default parameter ranges are gain 0.6–1.4, natural frequency 0.5–12 rad/s (log-uniform), damping ratio 0.25–2 (log-uniform), and delay 0–0.5 seconds. The default output noise standard deviation is 0.01 target units. These are initial engineering ranges for experimentation, not ranges established from participant data.
 
-The generator currently creates piecewise-constant targets. Richer target patterns and experimentally calibrated noise will be added as the real measurement workflow is defined.
+The generator creates piecewise-constant staircase targets, with configurable randomized dwell times (default 0.3–1.5 seconds). These are initial excitation settings; their usefulness should be checked against validation results.
 
 ## Development status
 
@@ -65,7 +65,8 @@ The generator currently creates piecewise-constant targets. Richer target patter
 - [x] Generate labeled synthetic trials with a fixed seed.
 - [x] Add a baseline convolutional parameter estimator and held-out evaluation.
 - [ ] Add configurable parameter bounds and dataset inspection utilities.
-- [ ] Improve synthetic stimulus and noise realism.
+- [x] Use staircase targets with configurable dwell durations.
+- [x] Save held-out parameter and response diagnostic plots.
 - [ ] Add response-based training on real measurements.
 - [ ] Benchmark recovery, robustness, and runtime.
 - [ ] Explore integration with THRUST-compute.
