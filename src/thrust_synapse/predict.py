@@ -40,18 +40,35 @@ def read_tsv(path: Path, input_column: str, output_column: str) -> tuple[np.ndar
 
 def extract_average_steps(target: np.ndarray, response: np.ndarray, sampling_rate: float,
                           window_seconds: float = 3.0, baseline_seconds: float = 0.2,
-                          change_threshold: float = 0.05) -> tuple[np.ndarray, dict[str, np.ndarray]]:
-    """Align isolated target steps and normalize response by each step amplitude."""
+                          change_threshold: float = 0.05,
+                          merge_seconds: float = 0.15) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    """Align isolated target-step events and normalize by each full step size.
+
+    A single requested level change can span adjacent samples in a resampled
+    log. Group threshold crossings close in time so a partial edge increment
+    is not mistaken for the full target step.
+    """
     window = int(round(window_seconds * sampling_rate))
     baseline = max(1, int(round(baseline_seconds * sampling_rate)))
-    changes = np.flatnonzero(np.abs(np.diff(target)) >= change_threshold) + 1
-    collected: dict[str, list[np.ndarray]] = {"increasing": [], "decreasing": []}
+    merge_gap = max(1, int(round(merge_seconds * sampling_rate)))
+    raw_changes = np.flatnonzero(np.abs(np.diff(target)) >= change_threshold) + 1
 
-    for position, index in enumerate(changes):
-        next_change = changes[position + 1] if position + 1 < len(changes) else len(target)
+    groups: list[list[int]] = []
+    for index in raw_changes:
+        if not groups or index - groups[-1][-1] > merge_gap:
+            groups.append([int(index)])
+        else:
+            groups[-1].append(int(index))
+
+    collected: dict[str, list[np.ndarray]] = {"increasing": [], "decreasing": []}
+    for position, group in enumerate(groups):
+        index = group[0]
+        end_index = group[-1]
+        next_change = groups[position + 1][0] if position + 1 < len(groups) else len(target)
         if index < baseline or index + window > len(target) or next_change < index + window:
             continue
-        step = float(target[index] - target[index - 1])
+
+        step = float(target[end_index] - target[index - 1])
         if abs(step) < change_threshold:
             continue
         y0 = float(np.median(response[index - baseline:index]))
@@ -65,7 +82,6 @@ def extract_average_steps(target: np.ndarray, response: np.ndarray, sampling_rat
         for direction, rows in collected.items()
     }
     return np.arange(window, dtype=np.float64) / sampling_rate, arrays
-
 
 def save_average_response_plot(path: Path, time_axis: np.ndarray,
                                step_responses: dict[str, np.ndarray],
