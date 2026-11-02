@@ -108,7 +108,7 @@ def extract_average_steps(target: np.ndarray, response: np.ndarray, sampling_rat
 def save_average_response_plot(path: Path, time_axis: np.ndarray,
                                step_responses: dict[str, np.ndarray],
                                parameters: ModelParameters, sampling_rate: float,
-                               refined_parameters: ModelParameters | None = None) -> dict[str, int]:
+                               refined_parameters: ModelParameters | None = None) -> tuple[dict[str, int], Path]:
     """Plot event-aligned measured step responses and the estimated model step response."""
     fig, axes = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
     counts: dict[str, int] = {}
@@ -144,9 +144,9 @@ def save_average_response_plot(path: Path, time_axis: np.ndarray,
     axes[-1].set_xlabel("Time after target change (s)")
     fig.suptitle("Event-aligned average response")
     fig.tight_layout()
-    _save_figure(fig, path, dpi=160)
+    saved_path = _save_figure(fig, path, dpi=160)
     plt.close(fig)
-    return counts
+    return counts, saved_path
 
 
 def predict_tsv(model_path: Path, tsv_path: Path, input_column: str, output_column: str,
@@ -213,7 +213,7 @@ def predict_tsv(model_path: Path, tsv_path: Path, input_column: str, output_colu
     rmse = float(np.sqrt(np.mean((model_response - response) ** 2)))
     output_prefix.parent.mkdir(parents=True, exist_ok=True)
     average_plot_path = output_prefix.with_name(output_prefix.name + "_average_response.png")
-    step_counts = save_average_response_plot(
+    step_counts, average_plot_path = save_average_response_plot(
         average_plot_path, average_time, average_steps, neural_parameters, sampling_rate,
         refined_parameters=refined_parameters,
     )
