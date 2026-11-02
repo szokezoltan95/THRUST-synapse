@@ -6,6 +6,7 @@ from pathlib import Path
 import time
 
 import numpy as np
+import matplotlib.pyplot as plt
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
@@ -62,6 +63,63 @@ def _response_rmse(inputs: np.ndarray, outputs: np.ndarray, parameters: np.ndarr
         )
         errors.append(np.mean((predicted - observed) ** 2))
     return float(np.sqrt(np.mean(errors)))
+
+
+def _save_diagnostics(output_path: Path, inputs: np.ndarray, outputs: np.ndarray,
+                      actual: np.ndarray, predicted: np.ndarray, indices: np.ndarray,
+                      sampling_rate: float, seed: int) -> tuple[Path, Path, Path]:
+    """Save parameter comparisons, response examples, and raw test predictions."""
+    names = ["Gain K", "Natural frequency (rad/s)", "Damping ratio", "Delay (s)"]
+    parameter_plot = output_path.with_name(output_path.stem + "_parameters.png")
+    response_plot = output_path.with_name(output_path.stem + "_responses.png")
+    prediction_file = output_path.with_name(output_path.stem + "_test_predictions.npz")
+    np.savez_compressed(
+        prediction_file,
+        actual_parameters=actual,
+        predicted_parameters=predicted,
+        test_indices=indices,
+    )
+
+    fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+    for column, ax in enumerate(axes.flat):
+        truth, estimate = actual[:, column], predicted[:, column]
+        low = float(min(truth.min(), estimate.min()))
+        high = float(max(truth.max(), estimate.max()))
+        pad = max((high - low) * 0.05, 1e-6)
+        ax.scatter(truth, estimate, s=12, alpha=0.45)
+        ax.plot([low - pad, high + pad], [low - pad, high + pad], "k--", linewidth=1)
+        ax.set_title(names[column])
+        ax.set_xlabel("True")
+        ax.set_ylabel("Estimated")
+        ax.grid(alpha=0.25)
+    fig.suptitle("Held-out synthetic test set: parameter estimates")
+    fig.tight_layout()
+    fig.savefig(parameter_plot, dpi=160)
+    plt.close(fig)
+
+    rng = np.random.default_rng(seed)
+    chosen = rng.choice(len(indices), size=min(6, len(indices)), replace=False)
+    fig, axes = plt.subplots(len(chosen), 1, figsize=(11, max(2.5 * len(chosen), 5)), squeeze=False)
+    time_axis = np.arange(inputs.shape[1]) / sampling_rate
+    for ax, test_pos in zip(axes.flat, chosen):
+        row = predicted[test_pos]
+        model_response = simulate_response(
+            inputs[test_pos],
+            ModelParameters(float(row[0]), float(row[1]), float(row[2]), float(max(0.0, row[3]))),
+            sampling_rate,
+        )
+        ax.plot(time_axis, inputs[test_pos], color="0.65", linewidth=1, label="Target")
+        ax.plot(time_axis, outputs[test_pos], color="tab:blue", alpha=0.7, linewidth=1, label="Observed")
+        ax.plot(time_axis, model_response, color="tab:orange", linewidth=1.4, label="Estimated model")
+        ax.set_ylabel("Position")
+        ax.grid(alpha=0.2)
+    axes.flat[0].legend(loc="upper right", ncols=3, fontsize=8)
+    axes.flat[-1].set_xlabel("Time (s)")
+    fig.suptitle("Held-out test response examples")
+    fig.tight_layout()
+    fig.savefig(response_plot, dpi=160)
+    plt.close(fig)
+    return parameter_plot, response_plot, prediction_file
 
 
 def train(data_path: Path, output_path: Path, epochs: int = 100,
@@ -158,8 +216,12 @@ def train(data_path: Path, output_path: Path, epochs: int = 100,
     parameter_mae = np.mean(np.abs(prediction - actual), axis=0)
     relative_mae = np.mean(np.abs(prediction - actual) / np.maximum(np.abs(actual), 1e-6), axis=0)
     response_rmse = _response_rmse(x_in[test_idx], x_out[test_idx], prediction, sampling_rate)
+    reference_rmse = _response_rmse(x_in[test_idx], x_out[test_idx], actual, sampling_rate)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    parameter_plot, response_plot, prediction_file = _save_diagnostics(
+        output_path, x_in[test_idx], x_out[test_idx], actual, prediction, test_idx, sampling_rate, seed
+    )
     torch.save({
         "state_dict": model.state_dict(),
         "target_mean": mean,
@@ -176,6 +238,7 @@ def train(data_path: Path, output_path: Path, epochs: int = 100,
         "test_delay_mae_s": float(parameter_mae[3]),
         "test_mean_relative_parameter_error": float(relative_mae.mean()),
         "test_response_rmse": response_rmse,
+        "test_reference_rmse_true_parameters": reference_rmse,
         "train_trials": float(len(train_idx)),
         "validation_trials": float(len(val_idx)),
         "test_trials": float(len(test_idx)),
@@ -184,6 +247,9 @@ def train(data_path: Path, output_path: Path, epochs: int = 100,
     for name, value in metrics.items():
         print(f"{name}: {value:.6g}")
     print(f"Saved model to {output_path}")
+    print(f"Saved parameter plot to {parameter_plot}")
+    print(f"Saved response plot to {response_plot}")
+    print(f"Saved test predictions to {prediction_file}")
     return metrics
 
 
