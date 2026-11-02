@@ -2,6 +2,7 @@
 from __future__ import annotations
 import argparse
 from pathlib import Path
+import time
 import numpy as np
 from .simulator import ModelParameters, simulate_response
 
@@ -20,7 +21,7 @@ def random_target(rng: np.random.Generator, samples: int, sampling_rate: float,
 def generate_dataset(count: int = 1000, duration: float = 300.0,
                      sampling_rate: float = 100.0, seed: int = 42,
                      noise_std: float = 0.01, dwell_seconds: float = 3.0,
-                     profile: str = "scope_x") -> dict[str, np.ndarray]:
+                     profile: str = "scope_x", progress: bool = False) -> dict[str, np.ndarray]:
     """Generate input/output trials and known model parameter labels."""
     if count < 1 or duration <= 0 or sampling_rate <= 0 or noise_std < 0:
         raise ValueError("count/duration/sampling_rate must be positive and noise_std nonnegative")
@@ -33,6 +34,10 @@ def generate_dataset(count: int = 1000, duration: float = 300.0,
     inputs = np.empty((count, samples), dtype=np.float32)
     outputs = np.empty_like(inputs)
     labels = np.empty((count, 4), dtype=np.float32)
+    started = time.perf_counter()
+    report_every = max(1, count // 20)
+    if progress:
+        print(f"Generating {count} trials ({duration:g} s each, {samples} samples per trial)...", flush=True)
     for i in range(count):
         if profile == "scope_x":
             # Approximate fit to the two X-axis channels in the supplied
@@ -60,6 +65,15 @@ def generate_dataset(count: int = 1000, duration: float = 300.0,
         inputs[i], outputs[i] = target, response
         labels[i] = (params.gain, params.natural_frequency,
                      params.damping_ratio, params.delay)
+        completed = i + 1
+        if progress and (completed % report_every == 0 or completed == count):
+            elapsed = time.perf_counter() - started
+            eta = elapsed / completed * (count - completed)
+            print(
+                f"Generation: {completed}/{count} ({100 * completed / count:.0f}%) "
+                f"| elapsed {elapsed:.1f}s | ETA {eta:.1f}s",
+                flush=True,
+            )
     return {
         "inputs": inputs, "outputs": outputs, "parameters": labels,
         "parameter_names": np.asarray(["gain", "natural_frequency_rad_s",
@@ -82,7 +96,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", type=Path, default=Path("data/synthetic/train.npz"))
     args = parser.parse_args()
-    data = generate_dataset(args.count, args.duration, args.sampling_rate, args.seed, args.noise_std, args.dwell_seconds, args.profile)
+    data = generate_dataset(args.count, args.duration, args.sampling_rate, args.seed, args.noise_std, args.dwell_seconds, args.profile, progress=True)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(args.output, **data)
     print(f"Saved {args.count} trials ({data['inputs'].shape[1]} samples each) to {args.output}")
