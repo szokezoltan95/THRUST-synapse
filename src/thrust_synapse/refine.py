@@ -19,13 +19,13 @@ def _unpack(values: np.ndarray) -> tuple[ModelParameters, float]:
     )
 
 
-def fit_average_step_response(
+def fit_typical_step_response(
     time_axis: np.ndarray,
     step_responses: dict[str, np.ndarray],
     sampling_rate: float,
     initial: ModelParameters,
 ) -> tuple[ModelParameters, float]:
-    """Refine parameters against event-aligned mean step responses.
+    """Refine parameters against the event-aligned median step response.
 
     The fit is deliberately based on isolated, aligned real target changes. It
     searches multiple damping-ratio and lead-zero starts. The real zero adds a
