@@ -112,7 +112,7 @@ def save_average_response_plot(path: Path, time_axis: np.ndarray,
                     label="Neural estimate")
             if refined_step is not None:
                 ax.plot(time_axis, refined_step, color="tab:green", linewidth=1.8,
-                        label="Refined fit to measured mean")
+                        label=f"Refined fit (Tz={refined_parameters.zero_time:.3f} s)")
         else:
             ax.text(0.5, 0.5, "No isolated steps available", ha="center", va="center",
                     transform=ax.transAxes)
@@ -210,6 +210,7 @@ def predict_tsv(model_path: Path, tsv_path: Path, input_column: str, output_colu
         "neural_response_rmse_normalized": neural_rmse,
         "refinement_used": refined_parameters is not None,
         "refined_average_step_rmse": refined_average_rmse,
+        "lead_zero_time_s": refined_parameters.zero_time if refined_parameters is not None else 0.0,
         "duration_s": float(uniform_time[-1] - uniform_time[0]),
         "sampling_rate_hz": sampling_rate,
         "isolated_increasing_steps": step_counts["increasing"],
@@ -234,7 +235,9 @@ def predict_tsv(model_path: Path, tsv_path: Path, input_column: str, output_colu
         ax.grid(alpha=0.25)
     fig.suptitle(
         f"{input_column} → {output_column}: K={gain:.3f}, wn={natural_frequency:.2f} rad/s, "
-        f"zeta={damping_ratio:.3f}, delay={delay:.3f} s, RMSE={rmse:.4f}"
+        f"zeta={damping_ratio:.3f}, delay={delay:.3f} s, "
+        f"Tz={refined_parameters.zero_time if refined_parameters is not None else 0.0:.3f} s, "
+        f"RMSE={rmse:.4f}"
     )
     fig.tight_layout()
     fig.savefig(plot_path, dpi=160)
@@ -250,7 +253,8 @@ def predict_tsv(model_path: Path, tsv_path: Path, input_column: str, output_colu
         print(
             "Refined mean-step parameters: "
             f"K={gain:.4f}, wn={natural_frequency:.4f} rad/s, "
-            f"zeta={damping_ratio:.4f}, delay={safe_delay:.4f} s; "
+            f"zeta={damping_ratio:.4f}, delay={safe_delay:.4f} s, "
+            f"Tz={refined_parameters.zero_time:.4f} s; "
             f"mean-step RMSE={refined_average_rmse:.5f}"
         )
     return metrics
