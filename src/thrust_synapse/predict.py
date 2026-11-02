@@ -164,7 +164,8 @@ def predict_tsv(model_path: Path, tsv_path: Path, input_column: str, output_colu
 
     if refined_parameters is not None:
         gain, natural_frequency = refined_parameters.gain, refined_parameters.natural_frequency
-        damping_ratio, safe_delay = refined_parameters.damping_ratio, refined_parameters.delay
+        damping_ratio, delay = refined_parameters.damping_ratio, refined_parameters.delay
+        safe_delay = delay
         model_response = simulate_response(
             target - target[0], refined_parameters, sampling_rate=sampling_rate,
             initial_output=float(response[0]),
