@@ -6,11 +6,16 @@ from scipy.signal import cont2discrete, tf2ss
 
 @dataclass(frozen=True)
 class ModelParameters:
-    """K*wn^2/(s^2 + 2*zeta*wn*s + wn^2) * exp(-tau*s)."""
+    """Second-order response with optional real zero and transport delay.
+
+    G(s) = K*wn^2*(Tz*s + 1)/(s^2 + 2*zeta*wn*s + wn^2) * exp(-tau*s).
+    A zero_time of zero preserves the original second-order model.
+    """
     gain: float
     natural_frequency: float
     damping_ratio: float
     delay: float
+    zero_time: float = 0.0
 
     def validate(self) -> None:
         if self.natural_frequency <= 0:
@@ -19,6 +24,8 @@ class ModelParameters:
             raise ValueError("damping_ratio must be positive")
         if self.delay < 0:
             raise ValueError("delay must be nonnegative")
+        if self.zero_time < 0:
+            raise ValueError("zero_time must be nonnegative")
 
 def delay_signal(signal: np.ndarray, delay_samples: float) -> np.ndarray:
     """Apply a nonnegative delay, using linear interpolation for fractional samples."""
@@ -49,7 +56,9 @@ def simulate_response(target: np.ndarray, parameters: ModelParameters,
     parameters.validate()
     delayed = delay_signal(u, parameters.delay * sampling_rate)
     wn, zeta = parameters.natural_frequency, parameters.damping_ratio
-    num, den = [parameters.gain * wn * wn], [1.0, 2.0 * zeta * wn, wn * wn]
+    scale = parameters.gain * wn * wn
+    num = [scale * parameters.zero_time, scale] if parameters.zero_time > 0 else [scale]
+    den = [1.0, 2.0 * zeta * wn, wn * wn]
     a, b, c, d, _ = cont2discrete(tf2ss(num, den), 1.0 / sampling_rate, method="zoh")
     state = np.zeros(a.shape[0], dtype=np.float64)
     result = np.empty_like(delayed)
