@@ -113,7 +113,7 @@ def save_average_response_plot(path: Path, time_axis: np.ndarray,
 
 def predict_tsv(model_path: Path, tsv_path: Path, input_column: str, output_column: str,
                 output_prefix: Path, scale: float = 900.0,
-                refine: bool = True) -> dict[str, float]:
+                refine: bool = True) -> dict[str, float | int | bool | None]:
     if scale <= 0:
         raise ValueError("scale must be positive")
     checkpoint = torch.load(model_path, map_location="cpu", weights_only=False)
