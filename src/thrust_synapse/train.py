@@ -123,7 +123,7 @@ def _save_diagnostics(output_path: Path, inputs: np.ndarray, outputs: np.ndarray
 
 
 def train(data_path: Path, output_path: Path, epochs: int = 100,
-          batch_size: int = 128, seed: int = 123) -> dict[str, float]:
+          batch_size: int = 8, seed: int = 123) -> dict[str, float]:
     try:
         archive = np.load(data_path)
     except (OSError, ValueError) as exc:
@@ -258,7 +258,7 @@ def main() -> None:
     parser.add_argument("--data", type=Path, default=Path("data/synthetic/train.npz"))
     parser.add_argument("--output", type=Path, default=Path("models/baseline.pt"))
     parser.add_argument("--epochs", type=int, default=100)
-    parser.add_argument("--batch-size", type=int, default=128)
+    parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--seed", type=int, default=123, help="Seed for the train/validation/test split.")
     args = parser.parse_args()
     train(args.data, args.output, args.epochs, args.batch_size, args.seed)
