@@ -102,6 +102,8 @@ def fit_average_step_response(
         raise ValueError("Mean-step fit did not improve on the neural estimate")
     if best[1][0] >= upper[0] - 1e-3:
         raise ValueError("Refined gain hit its upper search limit; keeping the neural estimate")
+    if best[1][5] >= upper[5] - 1e-3:
+        raise ValueError("Fitted lead zero hit its upper search limit; keeping the neural estimate")
 
     parameters, _ = _unpack(best[1])
     return parameters, best[0]
