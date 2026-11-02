@@ -28,16 +28,16 @@ Install the package and training dependency:
 python -m pip install -e ".[train]"
 ```
 
-Generate 10,000 eight-second trials sampled at 100 Hz, with the target changing exactly every three seconds:
+Generate 1,000 five-minute trials sampled at 100 Hz, with the target changing exactly every three seconds:
 
 ```bash
-thrust-synapse-generate --count 10000 --duration 8 --sampling-rate 100 --seed 42 --profile scope_x --dwell-seconds 3 --output data/synthetic/train.npz
+thrust-synapse-generate --count 1000 --duration 300 --sampling-rate 100 --seed 42 --profile scope_x --dwell-seconds 3 --output data/synthetic/train.npz
 ```
 
 Train the baseline estimator with an automatic 80/10/10 train/validation/test split:
 
 ```bash
-thrust-synapse-train --data data/synthetic/train.npz --output models/baseline.pt --epochs 100 --seed 123
+thrust-synapse-train --data data/synthetic/train.npz --output models/baseline.pt --epochs 100 --batch-size 8 --seed 123
 ```
 
 The split seed is independent of the dataset generation seed. Keep the test set for final evaluation; use validation performance for model selection. The training script reports parameter errors and response RMSE on the held-out test portion. It also saves parameter comparison and response example plots, plus an NPZ file with test predictions, beside the model. The true-parameter response RMSE provides a reference for the measurement-noise floor.
@@ -57,7 +57,7 @@ Each compressed NPZ dataset contains:
 
 The default `scope_x` profile is centered on a second-order fit to the measured LX/LXRQ and RX/RXRQ channels: gain about 0.99, natural frequency about 9.3 rad/s, damping ratio about 0.93, and delay about 0.26 s. The sampled ranges are deliberately wider than those two point estimates (gain 0.75–1.20, frequency 5–15 rad/s, damping 0.60–1.30, delay 0.08–0.45 s). The original broad distribution remains available with `--profile broad`. The default output noise standard deviation is 0.01 target units. The `scope_x` profile is an initial approximation from one recording and two axes; it should not be treated as a validated population distribution or as an estimate for Y axes.
 
-The generator creates piecewise-constant staircase targets, changing at a fixed interval (default 3 seconds). For an 8-second trial, the target changes at 3 and 6 seconds, with the last level held for the remaining 2 seconds.
+The generator creates piecewise-constant staircase targets, changing at a fixed interval (default 3 seconds). A 300-second trial contains about 100 target levels. Long trials require more memory and training time; the default is 1,000 trials, and the training batch size defaults to 8.
 
 ## Development status
 
