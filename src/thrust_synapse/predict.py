@@ -124,12 +124,15 @@ def save_average_response_plot(path: Path, time_axis: np.ndarray,
         ax.set_title(f"{direction.capitalize()} target steps (n={len(rows)})")
         if len(rows):
             mean = rows.mean(axis=0)
+            median = np.median(rows, axis=0)
             spread = rows.std(axis=0, ddof=1) if len(rows) > 1 else np.zeros_like(mean)
             for row in rows:
                 ax.plot(time_axis, row, color="tab:blue", alpha=0.12, linewidth=0.8)
             ax.fill_between(time_axis, mean - spread, mean + spread,
                             color="tab:blue", alpha=0.18, label="Mean ± 1 SD")
-            ax.plot(time_axis, mean, color="tab:blue", linewidth=2, label="Measured mean")
+            ax.plot(time_axis, mean, color="tab:blue", linewidth=1.8, label="Measured mean")
+            ax.plot(time_axis, median, color="tab:purple", linestyle="--", linewidth=1.8,
+                    label="Measured median")
             ax.plot(time_axis, model_step, color="tab:orange", linewidth=1.4,
                     label="Neural estimate")
             if refined_step is not None:
@@ -186,13 +189,13 @@ def predict_tsv(model_path: Path, tsv_path: Path, input_column: str, output_colu
     average_time, average_steps = extract_average_steps(target, response, sampling_rate)
 
     refined_parameters = None
-    refined_average_rmse = None
+    refined_typical_rmse = None
     if refine:
         total_steps = sum(len(rows) for rows in average_steps.values())
         if total_steps >= 3:
             print(f"Refining against {total_steps} isolated measured steps...", flush=True)
             try:
-                refined_parameters, refined_average_rmse = fit_average_step_response(
+                refined_parameters, refined_typical_rmse = fit_average_step_response(
                     average_time, average_steps, sampling_rate, neural_parameters
                 )
             except ValueError as exc:
@@ -231,7 +234,7 @@ def predict_tsv(model_path: Path, tsv_path: Path, input_column: str, output_colu
         "neural_delay_s": neural_parameters.delay,
         "neural_response_rmse_normalized": neural_rmse,
         "refinement_used": refined_parameters is not None,
-        "refined_average_step_rmse": refined_average_rmse,
+        "refined_typical_step_rmse": refined_typical_rmse,
         "lead_zero_time_s": refined_parameters.zero_time if refined_parameters is not None else 0.0,
         "duration_s": float(uniform_time[-1] - uniform_time[0]),
         "sampling_rate_hz": sampling_rate,
@@ -277,7 +280,7 @@ def predict_tsv(model_path: Path, tsv_path: Path, input_column: str, output_colu
             f"K={gain:.4f}, wn={natural_frequency:.4f} rad/s, "
             f"zeta={damping_ratio:.4f}, delay={safe_delay:.4f} s, "
             f"Tz={refined_parameters.zero_time:.4f} s; "
-            f"mean-step RMSE={refined_average_rmse:.5f}"
+            f"typical-step RMSE={refined_typical_rmse:.5f}"
         )
     return metrics
 
