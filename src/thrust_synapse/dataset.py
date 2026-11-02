@@ -6,28 +6,20 @@ import numpy as np
 from .simulator import ModelParameters, simulate_response
 
 def random_target(rng: np.random.Generator, samples: int, sampling_rate: float,
-                  min_dwell_seconds: float = 0.3,
-                  max_dwell_seconds: float = 1.5) -> np.ndarray:
-    """Create a staircase target with randomized levels and dwell durations."""
-    if samples < 2 or sampling_rate <= 0:
-        raise ValueError("samples must be at least 2 and sampling_rate must be positive")
-    if min_dwell_seconds <= 0 or max_dwell_seconds < min_dwell_seconds:
-        raise ValueError("dwell limits must be positive and max_dwell_seconds >= min_dwell_seconds")
-    min_dwell = max(1, int(round(min_dwell_seconds * sampling_rate)))
-    max_dwell = max(min_dwell, int(round(max_dwell_seconds * sampling_rate)))
+                  dwell_seconds: float = 3.0) -> np.ndarray:
+    """Create a staircase target that changes at a fixed dwell interval."""
+    if samples < 2 or sampling_rate <= 0 or dwell_seconds <= 0:
+        raise ValueError("samples, sampling_rate, and dwell_seconds must be positive")
+    dwell_samples = max(1, int(round(dwell_seconds * sampling_rate)))
     target = np.empty(samples, dtype=np.float64)
-    start = 0
-    while start < samples:
-        dwell = int(rng.integers(min_dwell, max_dwell + 1))
-        end = min(samples, start + dwell)
+    for start in range(0, samples, dwell_samples):
+        end = min(samples, start + dwell_samples)
         target[start:end] = rng.uniform(-1.0, 1.0)
-        start = end
     return target
 
 def generate_dataset(count: int = 10000, duration: float = 8.0,
                      sampling_rate: float = 100.0, seed: int = 42,
-                     noise_std: float = 0.01, min_dwell_seconds: float = 0.3,
-                     max_dwell_seconds: float = 1.5,
+                     noise_std: float = 0.01, dwell_seconds: float = 3.0,
                      profile: str = "scope_x") -> dict[str, np.ndarray]:
     """Generate input/output trials and known model parameter labels."""
     if count < 1 or duration <= 0 or sampling_rate <= 0 or noise_std < 0:
@@ -61,7 +53,7 @@ def generate_dataset(count: int = 10000, duration: float = 8.0,
                 damping_ratio=float(np.exp(rng.uniform(np.log(0.25), np.log(2.0)))),
                 delay=float(rng.uniform(0.0, 0.5)),
             )
-        target = random_target(rng, samples, sampling_rate, min_dwell_seconds, max_dwell_seconds)
+        target = random_target(rng, samples, sampling_rate, dwell_seconds)
         response = simulate_response(target, params, sampling_rate)
         if noise_std:
             response += rng.normal(0.0, noise_std, size=samples)
@@ -85,12 +77,12 @@ def main() -> None:
     parser.add_argument("--noise-std", type=float, default=0.01)
     parser.add_argument("--profile", choices=["scope_x", "broad"], default="scope_x",
                         help="Parameter distribution: fitted X-axis range or original broad range.")
-    parser.add_argument("--min-dwell", type=float, default=0.3, help="Minimum target hold time in seconds.")
-    parser.add_argument("--max-dwell", type=float, default=1.5, help="Maximum target hold time in seconds.")
+    parser.add_argument("--dwell-seconds", type=float, default=3.0,
+                        help="Fixed time between target changes in seconds.")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", type=Path, default=Path("data/synthetic/train.npz"))
     args = parser.parse_args()
-    data = generate_dataset(args.count, args.duration, args.sampling_rate, args.seed, args.noise_std, args.min_dwell, args.max_dwell, args.profile)
+    data = generate_dataset(args.count, args.duration, args.sampling_rate, args.seed, args.noise_std, args.dwell_seconds, args.profile)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(args.output, **data)
     print(f"Saved {args.count} trials ({data['inputs'].shape[1]} samples each) to {args.output}")
