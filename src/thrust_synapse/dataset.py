@@ -26,7 +26,8 @@ def random_target(rng: np.random.Generator, samples: int, sampling_rate: float,
 
 def generate_dataset(count: int = 10000, duration: float = 8.0,
                      sampling_rate: float = 100.0, seed: int = 42,
-                     noise_std: float = 0.01) -> dict[str, np.ndarray]:
+                     noise_std: float = 0.01, min_dwell_seconds: float = 0.3,
+                     max_dwell_seconds: float = 1.5) -> dict[str, np.ndarray]:
     """Generate input/output trials and known model parameter labels."""
     if count < 1 or duration <= 0 or sampling_rate <= 0 or noise_std < 0:
         raise ValueError("count/duration/sampling_rate must be positive and noise_std nonnegative")
@@ -44,7 +45,7 @@ def generate_dataset(count: int = 10000, duration: float = 8.0,
             damping_ratio=float(np.exp(rng.uniform(np.log(0.25), np.log(2.0)))),
             delay=float(rng.uniform(0.0, 0.5)),
         )
-        target = random_target(rng, samples, sampling_rate)
+        target = random_target(rng, samples, sampling_rate, min_dwell_seconds, max_dwell_seconds)
         response = simulate_response(target, params, sampling_rate)
         if noise_std:
             response += rng.normal(0.0, noise_std, size=samples)
@@ -70,7 +71,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", type=Path, default=Path("data/synthetic/train.npz"))
     args = parser.parse_args()
-    data = generate_dataset(args.count, args.duration, args.sampling_rate, args.seed, args.noise_std)
+    data = generate_dataset(args.count, args.duration, args.sampling_rate, args.seed, args.noise_std, args.min_dwell, args.max_dwell)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(args.output, **data)
     print(f"Saved {args.count} trials ({data['inputs'].shape[1]} samples each) to {args.output}")
