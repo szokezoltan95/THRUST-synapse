@@ -71,7 +71,9 @@ def fit_average_step_response(
         0.08, 0.16, 0.30, 0.55, 0.90,
     })
 
-    best = None
+    baseline_rmse = float(np.sqrt(np.mean(residual(base) ** 2)))
+    best = (baseline_rmse, base.copy())
+    improved = False
     for damping in damping_starts:
         start = base.copy()
         start[2] = np.log(damping)
@@ -85,9 +87,14 @@ def fit_average_step_response(
             x_scale="jac",
         )
         rmse = float(np.sqrt(np.mean(residual(result.x) ** 2)))
-        if best is None or rmse < best[0]:
+        if rmse < best[0]:
             best = (rmse, result.x)
+            improved = True
 
-    assert best is not None
+    if not improved:
+        raise ValueError("Mean-step fit did not improve on the neural estimate")
+    if best[1][0] >= upper[0] - 1e-3:
+        raise ValueError("Refined gain hit its upper search limit; keeping the neural estimate")
+
     parameters, _ = _unpack(best[1])
     return parameters, best[0]
