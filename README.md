@@ -31,7 +31,7 @@ python -m pip install -e ".[train]"
 Generate 10,000 eight-second trials sampled at 100 Hz, with target levels held for 0.3–1.5 seconds:
 
 ```bash
-thrust-synapse-generate --count 10000 --duration 8 --sampling-rate 100 --seed 42 --min-dwell 0.3 --max-dwell 1.5 --output data/synthetic/train.npz
+thrust-synapse-generate --count 10000 --duration 8 --sampling-rate 100 --seed 42 --profile scope_x --min-dwell 0.3 --max-dwell 1.5 --output data/synthetic/train.npz
 ```
 
 Train the baseline estimator with an automatic 80/10/10 train/validation/test split:
@@ -55,7 +55,7 @@ Each compressed NPZ dataset contains:
 | `sampling_rate_hz` | scalar | Sampling rate |
 | `seed` | scalar | Random seed for reproducibility |
 
-Default parameter ranges are gain 0.6–1.4, natural frequency 0.5–12 rad/s (log-uniform), damping ratio 0.25–2 (log-uniform), and delay 0–0.5 seconds. The default output noise standard deviation is 0.01 target units. These are initial engineering ranges for experimentation, not ranges established from participant data.
+The default `scope_x` profile is centered on a second-order fit to the measured LX/LXRQ and RX/RXRQ channels: gain about 0.99, natural frequency about 9.3 rad/s, damping ratio about 0.93, and delay about 0.26 s. The sampled ranges are deliberately wider than those two point estimates (gain 0.75–1.20, frequency 5–15 rad/s, damping 0.60–1.30, delay 0.08–0.45 s). The original broad distribution remains available with `--profile broad`. The default output noise standard deviation is 0.01 target units. The `scope_x` profile is an initial approximation from one recording and two axes; it should not be treated as a validated population distribution or as an estimate for Y axes.
 
 The generator creates piecewise-constant staircase targets, with configurable randomized dwell times (default 0.3–1.5 seconds). These are initial excitation settings; their usefulness should be checked against validation results.
 
