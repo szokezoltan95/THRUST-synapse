@@ -42,6 +42,14 @@ thrust-synapse-train --data data/synthetic/scope_x_300s.npz --output models/scop
 
 The split seed is independent of the dataset generation seed. Keep the test set for final evaluation; use validation performance for model selection. The training script reports parameter errors and response RMSE on the held-out test portion. It also saves parameter comparison and response example plots, plus an NPZ file with test predictions, beside the model. The true-parameter response RMSE provides a reference for the measurement-noise floor.
 
+Apply a trained checkpoint to one target/response pair in a THRUST TSV:
+
+```bash
+thrust-synapse-predict --model models/scope_x_300s.pt --tsv path/to/measurement.tsv --input-column LXRQ --output-column LX --output-prefix results/LX
+```
+
+The command resamples timestamps to the checkpoint sampling rate, scales raw axis values by 900, and saves estimated parameters, response RMSE, and a measured-versus-simulated plot. Repeat with RXRQ/RX for the second X axis. The scope_x parameter profile was initially derived from the same measurement used during development, so applying it to that file is a diagnostic check, not independent validation.
+
 ## Dataset format
 
 Each compressed NPZ dataset contains:
