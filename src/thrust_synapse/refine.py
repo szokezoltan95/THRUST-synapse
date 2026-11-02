@@ -8,10 +8,13 @@ from .simulator import ModelParameters, simulate_response
 
 
 def _unpack(values: np.ndarray) -> tuple[ModelParameters, float]:
-    """Decode log-scaled physical parameters and a constant response offset."""
+    """Decode log-scaled parameters, transport delay, offset, and lead zero."""
     gain, natural_frequency, damping_ratio = np.exp(values[:3])
     return (
-        ModelParameters(float(gain), float(natural_frequency), float(damping_ratio), float(values[3])),
+        ModelParameters(
+            float(gain), float(natural_frequency), float(damping_ratio),
+            float(values[3]), float(values[5]),
+        ),
         float(values[4]),
     )
 
@@ -25,9 +28,9 @@ def fit_average_step_response(
     """Refine parameters against event-aligned mean step responses.
 
     The fit is deliberately based on isolated, aligned real target changes. It
-    searches multiple damping-ratio starts so a neural estimate trained mostly
-    on heavily damped synthetic examples does not prevent finding visible
-    underdamped oscillations.
+    searches multiple damping-ratio and lead-zero starts. The real zero adds a
+    fast transient component that can represent the sharp overshoot visible
+    immediately after some measured target changes.
     """
     traces = [
         values for values in step_responses.values()
@@ -57,14 +60,15 @@ def fit_average_step_response(
         )
         return (simulated - measured_mean) * weights
 
-    lower = np.array([np.log(0.2), np.log(1.0), np.log(0.025), 0.0, -1.5])
-    upper = np.array([np.log(2.5), np.log(35.0), np.log(2.0), 1.0, 1.5])
+    lower = np.array([np.log(0.2), np.log(1.0), np.log(0.025), 0.0, -1.5, 0.0])
+    upper = np.array([np.log(2.5), np.log(35.0), np.log(2.0), 1.0, 1.5, 0.5])
     base = np.array([
         np.log(np.clip(initial.gain, 0.2, 2.5)),
         np.log(np.clip(initial.natural_frequency, 1.0, 35.0)),
         np.log(np.clip(initial.damping_ratio, 0.025, 2.0)),
         np.clip(initial.delay, 0.0, 1.0),
         float(measured_mean[0]),
+        0.0,
     ])
     damping_starts = sorted({
         float(np.clip(initial.damping_ratio, 0.03, 1.95)),
@@ -74,22 +78,25 @@ def fit_average_step_response(
     baseline_rmse = float(np.sqrt(np.mean(residual(base) ** 2)))
     best = (baseline_rmse, base.copy())
     improved = False
+    zero_starts = (0.0, 0.03, 0.08, 0.16)
     for damping in damping_starts:
-        start = base.copy()
-        start[2] = np.log(damping)
-        result = least_squares(
-            residual,
-            start,
-            bounds=(lower, upper),
-            loss="soft_l1",
-            f_scale=0.03,
-            max_nfev=80,
-            x_scale="jac",
-        )
-        rmse = float(np.sqrt(np.mean(residual(result.x) ** 2)))
-        if rmse < best[0]:
-            best = (rmse, result.x)
-            improved = True
+        for zero_time in zero_starts:
+            start = base.copy()
+            start[2] = np.log(damping)
+            start[5] = zero_time
+            result = least_squares(
+                residual,
+                start,
+                bounds=(lower, upper),
+                loss="soft_l1",
+                f_scale=0.03,
+                max_nfev=80,
+                x_scale="jac",
+            )
+            rmse = float(np.sqrt(np.mean(residual(result.x) ** 2)))
+            if rmse < best[0]:
+                best = (rmse, result.x)
+                improved = True
 
     if not improved:
         raise ValueError("Mean-step fit did not improve on the neural estimate")
